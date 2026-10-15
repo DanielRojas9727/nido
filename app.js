@@ -9,7 +9,9 @@ let pendingRender = false;
 
 const hoy = () => new Date().toLocaleDateString('en-CA');
 const yo = () => state.user?.uid;
-const sinLeer = () => state.novedades.filter((n) => n.ts > (state.perfil?.vistoHasta || 0) && n.autor !== yo()).length;
+const novSinLeer = () => state.novedades.filter((n) => n.ts > (state.perfil?.vistoHasta || 0) && n.autor !== yo()).length;
+const alertas = () => (state.config ? C.alertasPago(state) : []);
+const sinLeer = () => novSinLeer() + alertas().length;
 const catDe = (id) => C.categorias(state).find((c) => c.id === id) || { nombre: 'Otros', color: '#8A8F98' };
 const nombreConcepto = (id) => C.concepto(state, id)?.nombre || 'Sin concepto';
 
@@ -28,10 +30,12 @@ function render() {
   const views = { inicio: viewInicio, plan: viewPlan, movs: viewMovs, deudas: viewDeudas, mas: viewMas, reporte: viewReporte, novedades: viewNovedades, conceptos: viewConceptos, metas: viewMetas };
   const v = views[ui.route] || viewInicio;
   const tab = ['inicio', 'plan', 'movs', 'deudas'].includes(ui.route) ? ui.route : 'mas';
+  const y = render.last === ui.route + ui.ym ? window.scrollY : 0; render.last = ui.route + ui.ym;
   app.innerHTML = `<main class="view view-${ui.route}">${v()}</main>${ui.route === 'reporte' ? '' : navBar(tab)}${['inicio', 'movs'].includes(ui.route) ? `<button class="fab" id="fab" aria-label="Registrar movimiento">${icon('plus', 26)}</button>` : ''}`;
   $('#fab')?.addEventListener('click', () => movSheet());
   bind[ui.route]?.();
   bindComunes();
+  if (y) window.scrollTo(0, y);
 }
 
 const logo = (s = 32) => `<svg width="${s}" height="${s}" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="30" fill="#1F5F4F"/><path d="M15 36c4 9 30 9 34 0" fill="none" stroke="#F3EFE6" stroke-width="4" stroke-linecap="round"/><path d="M19 30c5 5 21 5 26 0" fill="none" stroke="#E7C873" stroke-width="3.4" stroke-linecap="round"/><circle cx="27" cy="25" r="4.2" fill="#F3EFE6"/><circle cx="37" cy="25" r="4.2" fill="#F3EFE6"/></svg>`;
@@ -117,6 +121,7 @@ function viewInicio() {
     <p class="meter-cap">${pct(avance)} del plan ejecutado · balance planeado ${money(r.balancePlan)}</p>
   </section>
 
+  ${proximosPagos()}
   <h2 class="sec">Plan vs. real</h2>
   <section class="card cats">
     ${C.categorias(state).map((c) => { const x = r.porCat[c.id] || { plan: 0, real: 0 }; return `
@@ -140,7 +145,7 @@ function viewInicio() {
   <section class="card list">${recientes.length ? recientes.map(movItem).join('') : `<p class="empty">Aún no hay movimientos este mes. Toca <b>+</b> para registrar el primero.</p>`}</section>`;
 }
 const bind = {};
-bind.inicio = () => bindMovItems();
+bind.inicio = () => { bindMovItems(); bindPagos(); };
 
 function movItem(m) {
   const ing = m.tipo === 'ingreso';
@@ -155,9 +160,9 @@ function movItem(m) {
 function bindMovItems() { app.querySelectorAll('[data-mov]').forEach((b) => b.onclick = () => movSheet(state.movimientos.find((m) => m.id === b.dataset.mov))); }
 
 // ------------------------------------------------------------------ registrar movimiento
-function movSheet(mov) {
+function movSheet(mov, preset = {}) {
   const nuevo = !mov;
-  mov = mov || { tipo: 'gasto', fecha: ui.ym === C.ymOf() ? hoy() : `${ui.ym}-01`, monto: 0, conceptoId: '' };
+  mov = mov || { tipo: 'gasto', fecha: ui.ym === C.ymOf() ? hoy() : `${ui.ym}-01`, monto: 0, conceptoId: '', ...preset };
   const cats = C.categorias(state);
   const opts = cats.map((c) => `<optgroup label="${esc(c.nombre)}">${C.conceptosActivos(state).filter((x) => x.categoria === c.id).map((x) => `<option value="${x.id}" ${x.id === mov.conceptoId ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</optgroup>`).join('');
   sheet(`<h3 class="sheet-title">${nuevo ? 'Registrar' : 'Editar movimiento'}</h3>
@@ -203,6 +208,74 @@ function movSheet(mov) {
   } });
 }
 
+// ------------------------------------------------------------------ fechas de pago (v2)
+const fCorta = (f) => new Date(f + 'T12:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+function textoEstado(e) {
+  if (e.pagado) return e.manual && e.real < e.plan ? 'Pagado (marcado a mano)' : 'Pagado';
+  if (!e.fecha) return '';
+  if (e.dias === null) return `Paga el ${fCorta(e.fecha)}`;
+  if (e.dias < 0) return `Venció el ${fCorta(e.fecha)} · hace ${-e.dias} día${e.dias === -1 ? '' : 's'}`;
+  if (e.dias === 0) return 'Vence hoy';
+  if (e.dias === 1) return 'Vence mañana';
+  return `Vence el ${fCorta(e.fecha)} · en ${e.dias} días`;
+}
+const dotEstado = (e) => (e.color ? `<i class="sdot ${e.color}" aria-hidden="true"></i>` : '');
+function planRow(x, r) {
+  const e = C.estadoPago(state, ui.ym, x.id, r);
+  const plan = +r.plan[x.id] || 0;
+  const linea = [e.fecha || e.pagado ? dotEstado(e) + esc(textoEstado(e)) : plan ? '<span class="add-date">+ fecha de pago</span>' : '',
+    r.real[x.id] ? `real ${money(r.real[x.id])}` : ''].filter(Boolean).join(' · ');
+  return `<div class="pl-row ${e.color ? 'st-' + e.color : ''}">
+    <button class="pl-name" data-pago="${x.id}" aria-label="${esc(x.nombre)}: fecha de pago y estado"><b>${esc(x.nombre)}</b>${linea ? `<small>${linea}</small>` : ''}</button>
+    <input inputmode="numeric" data-plan="${x.id}" value="${fmtInput(plan)}" placeholder="0" aria-label="Plan ${esc(x.nombre)}"></div>`;
+}
+function alertaItem(a) {
+  return `<button class="li alerta st-${a.color}" data-pagar="${a.id}" data-ym="${a.ym}">
+    <span class="li-ic" style="--c:${a.color === 'rojo' ? 'var(--s-rojo)' : a.color === 'amarillo' ? 'var(--s-amarillo)' : 'var(--s-verde)'}">${icon(a.color === 'verde' ? 'bell' : 'alert', 16)}</span>
+    <div class="li-main"><b>${esc(a.nombre)}</b><small>${dotEstado(a)}${esc(textoEstado(a))}</small></div>
+    <span class="num">${money(a.falta)}</span></button>`;
+}
+function proximosPagos() {
+  if (ui.ym !== C.ymOf()) return '';
+  const r = C.resumenMes(state, ui.ym);
+  const todos = C.conceptosActivos(state).map((c) => ({ ...C.estadoPago(state, ui.ym, c.id, r), nombre: c.nombre, ym: ui.ym })).filter((e) => e.fecha && e.plan > 0);
+  const al = alertas();
+  const verdes = todos.filter((e) => e.color === 'verde').sort((a, b) => a.dias - b.dias).slice(0, Math.max(0, 4 - al.length));
+  const pagados = todos.filter((e) => e.pagado).length;
+  if (!todos.length) return '';
+  return `<h2 class="sec">Próximos pagos <span class="sec-num">${pagados} de ${todos.length} pagados</span></h2>
+  <section class="card list">${[...al, ...verdes].map(alertaItem).join('') || '<p class="empty">Todo al día. No hay pagos próximos este mes.</p>'}</section>`;
+}
+function bindPagos() {
+  app.querySelectorAll('[data-pagar]').forEach((b) => b.onclick = () => {
+    const ym = b.dataset.ym, id = b.dataset.pagar, e = C.estadoPago(state, ym, id);
+    movSheet(null, { conceptoId: id, monto: e.falta || e.plan, fecha: ym === C.ymOf() ? hoy() : C.fechaPago(state, ym, id) || `${ym}-01` });
+  });
+}
+function pagoSheet(id, ym) {
+  const c = C.concepto(state, id), mes = state.meses[ym] || {};
+  const e = C.estadoPago(state, ym, id);
+  const diaMes = mes.diaPago?.[id];
+  sheet(`<h3 class="sheet-title">${esc(c.nombre)}</h3>
+    <p class="hint" style="margin:-8px 0 14px">${e.fecha || e.pagado ? dotEstado(e) + esc(textoEstado(e)) : 'Sin fecha de pago'}</p>
+    <div class="f"><label for="p-dia">Día de pago (se repite cada mes)</label><input id="p-dia" type="number" inputmode="numeric" min="1" max="31" placeholder="Ej: 5" value="${c.diaPago || ''}"></div>
+    <div class="f"><label for="p-mes">Solo en ${C.mesLargo(ym)} (opcional)</label><input id="p-mes" type="number" inputmode="numeric" min="1" max="31" placeholder="Igual que siempre" value="${diaMes ?? ''}"><small class="hint">Úsalo si este mes la fecha cambia.</small></div>
+    <label class="check"><input type="checkbox" id="p-pag" ${mes.pagado?.[id] ? 'checked' : ''}><span>Marcar como pagado en ${C.mesLargo(ym)}<small>Se marca solo cuando lo registrado cubre lo planeado.</small></span></label>
+    <div class="row-btns"><button class="btn ghost" data-close>Cancelar</button><button class="btn primary" id="p-ok">${icon('check', 18)} Guardar</button></div>`,
+  { onMount: (el, close) => {
+    $('#p-ok', el).onclick = async () => {
+      const norm = (v) => { const n = parseInt(v, 10); return n >= 1 && n <= 31 ? n : null; };
+      const dia = norm($('#p-dia', el).value), dm = norm($('#p-mes', el).value), pag = $('#p-pag', el).checked;
+      close();
+      const cambios = [];
+      if ((c.diaPago || null) !== dia) { await db.saveConcepto({ id, diaPago: dia }); cambios.push(dia ? `día de pago ${dia}` : 'sin fecha de pago'); }
+      if ((diaMes ?? null) !== dm) { await db.setMes(ym, { diaPago: { [id]: dm } }); if (dm) cambios.push(`día ${dm} solo en ${C.mesLargo(ym)}`); }
+      if (!!mes.pagado?.[id] !== pag) { await db.setMes(ym, { pagado: { [id]: pag } }); cambios.push(pag ? `marcado como pagado en ${C.mesLargo(ym)}` : `desmarcado como pagado en ${C.mesLargo(ym)}`); }
+      if (cambios.length) { db.novedad(`ajustó ${c.nombre}: ${cambios.join(', ')}`); toast('Guardado'); }
+    };
+  } });
+}
+
 // ------------------------------------------------------------------ plan
 function viewPlan() {
   const r = C.resumenMes(state, ui.ym);
@@ -228,7 +301,7 @@ function viewPlan() {
   ${cats.map((c) => { const cs = C.conceptosActivos(state).filter((x) => x.categoria === c.id); const tot = r.porCat[c.id]?.plan || 0; return `
   <h2 class="sec"><span class="chip-dot" style="background:${c.color}"></span>${esc(c.nombre)} <span class="sec-num">${money(tot)} · ${pct(r.totalPlan ? tot / r.totalPlan : 0)}${obj[c.id] != null ? ` <small>(meta ${pct(obj[c.id])})</small>` : ''}</span></h2>
   <section class="card form-list">${cs.map((x) => `
-    <label class="pl-row"><span>${esc(x.nombre)}${r.real[x.id] ? `<small>real ${money(r.real[x.id])}</small>` : ''}</span><input inputmode="numeric" data-plan="${x.id}" value="${fmtInput(+r.plan[x.id] || 0)}" placeholder="0"></label>`).join('') || '<p class="empty">Sin conceptos</p>'}
+    ${planRow(x, r)}`).join('') || '<p class="empty">Sin conceptos</p>'}
   </section>`; }).join('')}
   <div class="actions">
     <button class="btn ghost" id="copiar">${icon('copy', 18)} Copiar plan de ${C.mesCorto(C.addMonths(ui.ym, -1))}</button>
@@ -243,6 +316,7 @@ function notiPlan(txt) { // una novedad por mes cada 10 minutos, para no llenar 
 }
 bind.plan = () => {
   const ym = ui.ym;
+  app.querySelectorAll('[data-pago]').forEach((b) => b.onclick = () => pagoSheet(b.dataset.pago, ym));
   app.querySelectorAll('[data-plan],[data-ing],[data-extra]').forEach((inp) => {
     moneyInput(inp);
     inp.addEventListener('focus', () => inp.select());
@@ -372,12 +446,16 @@ bind.mas = () => { $('#salir').onclick = () => db.logout(); };
 // ------------------------------------------------------------------ novedades
 function viewNovedades() {
   const visto = state.perfil?.vistoHasta || 0;
-  setTimeout(() => sinLeer() && db.marcarVisto(), 1200);
+  setTimeout(() => novSinLeer() && db.marcarVisto(), 1200);
   const fmt = (ts) => { const d = new Date(ts); const dif = (Date.now() - ts) / 6e4; return dif < 1 ? 'ahora' : dif < 60 ? `hace ${Math.round(dif)} min` : dif < 1440 ? `hace ${Math.round(dif / 60)} h` : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); };
+  const al = alertas();
   return `${header('Novedades', { back: 'mas' })}
+  ${al.length ? `<h2 class="sec">Alertas de pago</h2><section class="card list">${al.map(alertaItem).join('')}</section><h2 class="sec">Cambios recientes</h2>` : ''}
   <section class="card list">${state.novedades.length ? state.novedades.map((n) => `
     <div class="li nov ${n.ts > visto && n.autor !== yo() ? 'unread' : ''}"><span class="av">${esc((n.nombre || '?')[0])}</span><div class="li-main"><p><b>${n.autor === yo() ? 'Tú' : esc(n.nombre)}</b> ${esc(n.texto)}</p><small>${fmt(n.ts)}</small></div></div>`).join('') : '<p class="empty">Todavía no hay novedades.</p>'}</section>`;
 }
+
+bind.novedades = () => bindPagos();
 
 // ------------------------------------------------------------------ conceptos y categorías
 function viewConceptos() {

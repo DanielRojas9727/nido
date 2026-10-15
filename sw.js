@@ -1,5 +1,5 @@
 // Service worker: guarda la app para abrir rápido y sin conexión. Los datos los maneja Firestore.
-const V = 'nido-v1';
+const V = 'nido-v2';
 const ASSETS = ['./', 'index.html', 'app.css', 'app.js', 'data.js', 'calc.js', 'ui.js', 'firebase-config.js', 'manifest.webmanifest', 'icon-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== V).map((k) => caches.delete(k))))); self.clients.claim(); });

@@ -209,6 +209,25 @@ button.li:active, a.li:active { background: #FAF8F4; }
 .r-foot { text-align: center; font-size: 11px; color: var(--muted); margin-top: 8px; }
 @media (min-width: 640px) { .r-kpis { grid-template-columns: repeat(4, 1fr); } .r-grid { grid-template-columns: 1fr 1fr; } }
 
+/* v2: fechas de pago y semáforo */
+:root { --s-verde: #2E9E5B; --s-amarillo: #D99A00; --s-rojo: #C8452F; --pastel: #E6F4EA; }
+.sdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+.sdot.verde { background: var(--s-verde); } .sdot.amarillo { background: var(--s-amarillo); } .sdot.rojo { background: var(--s-rojo); } .sdot.pagado { background: var(--s-verde); }
+.pl-name { flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; min-height: 44px; justify-content: center; font-size: 15px; }
+.pl-name b { font-weight: 500; }
+.pl-name small { color: var(--muted); font-size: 12px; }
+.pl-row.st-pagado { background: var(--pastel); }
+.pl-row.st-pagado input { background: rgba(255,255,255,.7); }
+.pl-row.st-amarillo .pl-name small { color: #8A6200; }
+.pl-row.st-rojo .pl-name small { color: var(--s-rojo); }
+.add-date { color: var(--brand); font-weight: 600; }
+.alerta.st-rojo { background: #FCEFEC; } .alerta.st-amarillo { background: #FDF6E3; }
+.alerta .li-main small { color: var(--ink-2); }
+.check { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--brand); margin: 1px 0 0; flex: none; }
+.check span { display: flex; flex-direction: column; font-weight: 600; font-size: 15px; }
+.check small { font-weight: 400; color: var(--muted); font-size: 13px; }
+
 @media print {
   @page { size: A4; margin: 12mm; }
   body, html { background: #fff; }

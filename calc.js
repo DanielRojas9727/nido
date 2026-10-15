@@ -84,3 +84,42 @@ export function mesesDisponibles(s) {
   for (let i = -1; i <= 3; i++) set.add(addMonths(hoy, i));
   return [...set].sort();
 }
+
+// ---------- Fechas de pago y semáforo (v2) ----------
+// Día de pago: fijo por concepto (concepto.diaPago) y se puede cambiar solo para un mes (mes.diaPago[id]).
+// Estado: pagado (manual o lo registrado cubre el plan) · verde (> 2 días) · amarillo (0 a 2 días) · rojo (vencido).
+export const hoyStr = () => new Date().toLocaleDateString('en-CA');
+const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
+export function fechaPago(s, ym, id) {
+  const c = concepto(s, id); const mes = s.meses[ym] || {};
+  const dia = +(mes.diaPago?.[id] ?? c?.diaPago) || 0;
+  if (!dia) return null;
+  const [y, m] = ym.split('-').map(Number);
+  const ult = new Date(y, m, 0).getDate();
+  return `${ym}-${String(Math.min(dia, ult)).padStart(2, '0')}`;
+}
+export function estadoPago(s, ym, id, r = resumenMes(s, ym), hoy = hoyStr()) {
+  const plan = +r.plan[id] || 0, real = r.real[id] || 0;
+  const manual = !!r.mes.pagado?.[id];
+  const pagado = manual || (plan > 0 && real >= plan);
+  const fecha = fechaPago(s, ym, id);
+  if (pagado) return { id, fecha, plan, real, pagado: true, manual, color: 'pagado', dias: fecha ? diasEntre(hoy, fecha) : null };
+  // Meses anteriores al inicio de las alertas (ago-sep 2026, ya cerrados) no se colorean
+  if (!fecha || plan <= 0 || ym < (s.config?.alertasDesde || '2026-10')) return { id, fecha, plan, real, pagado: false, color: null, dias: null };
+  const dias = diasEntre(hoy, fecha);
+  const color = dias < 0 ? 'rojo' : dias <= 2 ? 'amarillo' : 'verde';
+  return { id, fecha, plan, real, pagado: false, color, dias, falta: Math.max(0, plan - real) };
+}
+// Alertas: pagos en amarillo o rojo del mes actual y vencidos sin pagar de meses anteriores (hasta 2 meses atrás)
+export function alertasPago(s, hoy = hoyStr()) {
+  const ymHoy = hoy.slice(0, 7), out = [];
+  for (const ym of [addMonths(ymHoy, -2), addMonths(ymHoy, -1), ymHoy]) {
+    if (!s.meses[ym] || ym < (s.config?.alertasDesde || '2026-10')) continue;
+    const r = resumenMes(s, ym);
+    for (const c of conceptosActivos(s)) {
+      const e = estadoPago(s, ym, c.id, r, hoy);
+      if (e.color === 'amarillo' || e.color === 'rojo') out.push({ ...e, ym, nombre: c.nombre });
+    }
+  }
+  return out.sort((a, b) => a.dias - b.dias);
+}
