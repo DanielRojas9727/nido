@@ -113,6 +113,8 @@ button.li:active, a.li:active { background: #FAF8F4; }
 
 /* forms */
 .form-list { padding: 4px 0; }
+/* v3: el sombreado de las filas no se sale de las esquinas redondeadas */
+.card.form-list, .card.list { overflow: hidden; }
 .pl-row { display: flex; align-items: center; gap: 12px; padding: 8px 16px; min-height: 56px; }
 .pl-row + .pl-row { border-top: 1px solid var(--line); }
 .pl-row > span:first-child { flex: 1; font-size: 15px; display: flex; flex-direction: column; }
@@ -218,6 +220,11 @@ button.li:active, a.li:active { background: #FAF8F4; }
 .pl-name small { color: var(--muted); font-size: 12px; }
 .pl-row.st-pagado { background: var(--pastel); }
 .pl-row.st-pagado input { background: rgba(255,255,255,.7); }
+/* v3: ingresos con sombreado azul */
+:root { --azul: #2F6DB3; --pastel-azul: #E2ECFA; }
+.pl-row.st-ingreso { background: var(--pastel-azul); }
+.pl-row.st-ingreso input { background: rgba(255,255,255,.7); }
+.pl-row.st-ingreso small { color: #45658C; }
 .pl-row.st-amarillo .pl-name small { color: #8A6200; }
 .pl-row.st-rojo .pl-name small { color: var(--s-rojo); }
 .add-date { color: var(--brand); font-weight: 600; }
@@ -239,4 +246,18 @@ button.li:active, a.li:active { background: #FAF8F4; }
   .r-box { padding: 10px 12px; margin-bottom: 8px; } .r-kpis { margin: 10px 0; } .r-table td { padding: 4px 3px; } .r-find { font-size: 12px; }
 }
 @keyframes rise { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
+/* v3: animación de entrada del logo */
+#intro { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: grid; place-content: center; justify-items: center; gap: 14px; transition: opacity .35s ease, visibility .35s; }
+#intro.out { opacity: 0; visibility: hidden; }
+#intro .in-bg { transform-box: fill-box; transform-origin: center; animation: in-pop .5s cubic-bezier(.2,.8,.2,1) both; }
+#intro .in-arc { stroke-dasharray: 1; stroke-dashoffset: 0; animation: in-draw .45s cubic-bezier(.4,0,.2,1) both; }
+#intro .in-a1 { animation-delay: .3s; } #intro .in-a2 { animation-delay: .45s; }
+#intro .in-egg { transform-box: fill-box; transform-origin: center; animation: in-egg .38s cubic-bezier(.34,1.56,.64,1) both; }
+#intro .in-e1 { animation-delay: .72s; } #intro .in-e2 { animation-delay: .82s; }
+#intro .in-word { font: 700 30px/1 var(--font); color: var(--brand); letter-spacing: -.02em; animation: in-word .45s cubic-bezier(.2,.8,.2,1) .9s both; }
+@keyframes in-pop { from { transform: scale(.6); opacity: 0; } }
+@keyframes in-draw { from { stroke-dashoffset: 1; opacity: 0; } 10% { opacity: 1; } }
+@keyframes in-egg { from { transform: scale(0); } }
+@keyframes in-word { from { opacity: 0; transform: translateY(8px); } }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

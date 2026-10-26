@@ -7,6 +7,16 @@ const app = $('#app');
 const ui = { route: (location.hash.slice(1) || 'inicio'), ym: C.ymOf(), filtro: 'todos' };
 let pendingRender = false;
 
+// v3: animación de entrada. Se retira cuando terminó (≈1,4 s) y los datos están listos (máx. 4 s).
+(() => {
+  const el = document.getElementById('intro'); if (!el) return;
+  const t0 = Date.now(); let hecho = false;
+  const quitar = () => { if (hecho) return; hecho = true; el.classList.add('out'); setTimeout(() => el.remove(), 400); };
+  const revisar = () => { if (state.ready && Date.now() - t0 >= 1400) quitar(); };
+  const iv = setInterval(() => { revisar(); if (hecho) clearInterval(iv); }, 100);
+  setTimeout(() => { quitar(); clearInterval(iv); }, 4000);
+})();
+
 const hoy = () => new Date().toLocaleDateString('en-CA');
 const yo = () => state.user?.uid;
 const novSinLeer = () => state.novedades.filter((n) => n.ts > (state.perfil?.vistoHasta || 0) && n.autor !== yo()).length;
@@ -294,7 +304,7 @@ function viewPlan() {
   <section class="card form-list">
     ${incomeRow('daniel', 'Ingreso Daniel', ing.daniel)}
     ${incomeRow('angye', 'Ingreso Angye', ing.angye)}
-    <label class="pl-row"><span>Extra esperado <small>prima, cesantías</small></span><input inputmode="numeric" data-extra value="${fmtInput(r.mes.extraPlan)}" placeholder="0"></label>
+    <label class="pl-row${+r.mes.extraPlan > 0 ? ' st-ingreso' : ''}"><span>Extra esperado <small>prima, cesantías</small></span><input inputmode="numeric" data-extra value="${fmtInput(r.mes.extraPlan)}" placeholder="0"></label>
     ${r.extraReal ? `<p class="pl-foot">Extras recibidos: <b>${money(r.extraReal)}</b></p>` : ''}
   </section>
 
@@ -308,7 +318,7 @@ function viewPlan() {
     <button class="btn ghost" data-go="conceptos">${icon('tag', 18)} Conceptos y categorías</button>
   </div>`;
 }
-const incomeRow = (k, label, v) => `<label class="pl-row"><span>${label}</span><input inputmode="numeric" data-ing="${k}" value="${fmtInput(+v || 0)}" placeholder="0"></label>`;
+const incomeRow = (k, label, v) => `<label class="pl-row${+v > 0 ? ' st-ingreso' : ''}"><span>${label}</span><input inputmode="numeric" data-ing="${k}" value="${fmtInput(+v || 0)}" placeholder="0"></label>`;
 const avisoPlan = {};
 function notiPlan(txt) { // una novedad por mes cada 10 minutos, para no llenar el historial
   const k = ui.ym + txt; if (avisoPlan[k] && Date.now() - avisoPlan[k] < 6e5) return;
